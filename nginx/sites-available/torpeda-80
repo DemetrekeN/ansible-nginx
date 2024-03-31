@@ -1,0 +1,14 @@
+server {
+        listen 80;
+        listen [::]:80;
+        server_name torpeda.uberlegenheit.ru;
+        
+        root /home/genadiy/project-portfolio/;
+        index index.html index.htm;
+
+        location ~* ^.+\.(css|js|ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|rss|atom|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf)$ {
+          access_log off;
+          log_not_found off;
+          expires max;
+        }
+}

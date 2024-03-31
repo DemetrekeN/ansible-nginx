@@ -1,0 +1,105 @@
+- name: Install nginx on Ubuntu
+  hosts: all
+  vars:
+    - domain: torpeda.uberlegenheit.ru
+    - certificate_path: "/etc/letsencrypt/live/{{ domain }}"
+  handlers:
+    - name: reload nginx
+      service:
+        name: nginx
+        state: reloaded
+
+  tasks:
+  - name: Create user
+    user:
+      append: true
+      name: genadiy
+      groups: www-data
+
+  - name: Update apt cache
+    apt:
+      update_cache: yes
+    become: yes
+# сюда тег для отключения проверки на идемп в молекуле
+
+  - name: Install pkgs
+    apt:
+      pkg:
+        - nginx
+        - certbot
+      force_apt_get: true
+
+  - name: Copy directory with site
+    copy:
+      src: files/site/
+      dest: /home/genadiy/project-portfolio/
+      mode: preserve
+
+  - name: Change rule/owner of files
+    file:
+      path: /home/genadiy/project-portfolio/
+      state: directory
+      owner: genadiy
+      group: www-data
+#      mode: 0755
+
+  - name: Copy config files for nginx
+    copy:
+      src: nginx/confs/
+      dest: /etc/nginx/
+
+  - name: Check is SSL certificates exists
+    stat:
+      path: "{{ certificate_path }}"
+    register: dir_check
+
+  - name: Set fact of SSL certificates
+    set_fact:
+      ssl_exist: "{{ dir_check.stat.exists }}"
+
+  - name: Copy nginx config without SSL
+    copy:
+      src: nginx/sites-available/torpeda-80
+      dest: /etc/nginx/sites-available/torpeda
+    when: not ssl_exist
+
+  - name: Copy nginx config with SSL
+    copy:
+      src: nginx/sites-available/torpeda-443
+      dest: /etc/nginx/sites-available/torpeda
+    when: ssl_exist
+
+  - name: Remove default symlink
+    file:
+      path: /etc/nginx/sites-enabled/default
+      state: absent
+
+  - name: Create symlink of config
+    file:
+      src: /etc/nginx/sites-available/torpeda
+      dest: /etc/nginx/sites-enabled/torpeda
+      group: root
+      owner: root
+      state: link
+
+  - name: Reload nginx for new confing
+    service:
+      name: nginx
+      state: reloaded
+
+  - name: Create SSL certificate if it's not exists
+    shell:
+      cmd: certbot certonly --webroot -w /home/genadiy/project-portfolio/ --email root@rooted.onion --agree-tos --non-interactive -d {{ domain }}
+    tags: molecule-notest
+
+  - name: Auto renew SSL certificates
+    copy:
+      src: files/certbot
+      dest: /etc/cron.d/
+
+  - name: Copy nginx config with SSL after receiving certs
+    copy:
+      src: nginx/sites-available/torpeda-443
+      dest: /etc/nginx/sites-available/torpeda
+    notify: reload nginx
+    when: not ssl_exist
